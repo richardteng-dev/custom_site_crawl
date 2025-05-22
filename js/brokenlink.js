@@ -1,23 +1,22 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
+const path = require('path');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 const { URL } = require('url');
 
 const sitemapFile = '../sitemap.txt';
 const selector = '#unit-content';
+const outputFile = '../broken_links_report.csv';
+const failedPagesFile = '../failed_pages.txt';
 
-const HEAD_TIMEOUT_MS = 8000; // 8s per link check
-const PAGE_TIMEOUT_MS = 30000; // 30s per page load
+const HEAD_TIMEOUT_MS = 8000;
+const PAGE_TIMEOUT_MS = 30000;
 
-// Fetch with timeout
 async function fetchWithTimeout(url, timeout) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
     try {
-        const res = await fetch(url, {
-            method: 'HEAD',
-            signal: controller.signal
-        });
+        const res = await fetch(url, { method: 'HEAD', signal: controller.signal });
         clearTimeout(timer);
         return res;
     } catch (err) {
@@ -31,8 +30,8 @@ async function fetchWithTimeout(url, timeout) {
     const urls = fs.readFileSync(sitemapFile, 'utf8').split('\n').filter(Boolean);
     const page = await browser.newPage();
 
-    let brokenLinks = [];
-    let failedPages = [];
+    const brokenLinks = [['Page URL', 'Link Text', 'Broken Link']];
+    const failedPages = [];
 
     for (let i = 0; i < urls.length; i++) {
         const pageUrl = urls[i];
@@ -41,7 +40,9 @@ async function fetchWithTimeout(url, timeout) {
         try {
             await Promise.race([
                 page.goto(pageUrl, { waitUntil: 'load', timeout: PAGE_TIMEOUT_MS }),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Page load timeout')), PAGE_TIMEOUT_MS + 2000))
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Page load timeout')), PAGE_TIMEOUT_MS + 2000)
+                )
             ]);
 
             const links = await page.$$eval(`${selector} a[href]`, (anchors) =>
@@ -57,34 +58,37 @@ async function fetchWithTimeout(url, timeout) {
                         !link.href.startsWith('/events-filtered')
                     )
             );
-            
-            
+
             for (const { href, text } of links) {
                 const linkUrl = new URL(href, pageUrl).href;
-            
+
                 try {
                     const res = await fetchWithTimeout(linkUrl, HEAD_TIMEOUT_MS);
                     if (res.status === 404) {
-                        console.log(`❌ 404 link on ${pageUrl}: ${linkUrl} (text: "${text}")`);
-                        brokenLinks.push(`Page: ${pageUrl} | Link text: ${text} | Broken link: ${linkUrl}`);
+                        console.log(`❌ 404 on ${pageUrl}: ${linkUrl} (text: "${text}")`);
+                        brokenLinks.push([pageUrl, text, linkUrl]);
                     }
                 } catch (err) {
                     console.warn(`⚠️ Error checking ${linkUrl} on ${pageUrl}: ${err.message}`);
-                    brokenLinks.push(`Page: ${pageUrl} | Link text: ${text} | Broken link: ${linkUrl} (Fetch error)`);
+                    brokenLinks.push([pageUrl, text, linkUrl]);
                 }
             }
-            
         } catch (err) {
             console.error(`🚫 Failed to process ${pageUrl}: ${err.message}`);
             failedPages.push(pageUrl);
         }
     }
 
-    fs.writeFileSync('../broken_links_report.txt', brokenLinks.join('\n'), 'utf8');
-    fs.writeFileSync('../failed_pages.txt', failedPages.join('\n'), 'utf8');
+    // Write CSV file
+    const csvContent = brokenLinks.map(row =>
+        row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')
+    ).join('\n');
 
-    console.log(`✅ Done! Found ${brokenLinks.length} broken links.`);
-    console.log(`❗ Skipped ${failedPages.length} failed pages. See failed_pages.txt.`);
+    fs.writeFileSync(outputFile, csvContent, 'utf8');
+    fs.writeFileSync(failedPagesFile, failedPages.join('\n'), 'utf8');
+
+    console.log(`✅ Done! ${brokenLinks.length - 1} broken links saved to ${outputFile}`);
+    console.log(`❗ ${failedPages.length} failed pages saved to ${failedPagesFile}`);
 
     await browser.close();
 })();

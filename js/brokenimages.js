@@ -1,8 +1,10 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
+const path = require('path');
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 const sitemapFile = '../sitemap.txt';
+const outputFile = '../broken_images_report.csv';
 const IMAGE_TIMEOUT_MS = 10000;
 
 (async () => {
@@ -10,14 +12,14 @@ const IMAGE_TIMEOUT_MS = 10000;
     const page = await browser.newPage();
     const urls = fs.readFileSync(sitemapFile, 'utf8').split('\n').filter(Boolean);
 
-    const brokenImages = [];
+    // CSV header
+    const brokenImages = [['Page URL', 'Image URL', 'Status/Error', 'Alt Text']];
 
     for (const url of urls) {
         try {
             console.log(`🔍 Checking page: ${url}`);
             await page.goto(url, { waitUntil: 'load', timeout: 30000 });
 
-            // Extract all image src attributes from the page
             const images = await page.$$eval('img[src]', imgs =>
                 imgs.map(img => ({
                     src: img.getAttribute('src'),
@@ -26,18 +28,17 @@ const IMAGE_TIMEOUT_MS = 10000;
             );
 
             for (const { src, alt } of images) {
-                // Convert relative URLs to absolute ones
                 const fullSrc = new URL(src, url).href;
 
                 try {
                     const res = await fetch(fullSrc, { method: 'HEAD', timeout: IMAGE_TIMEOUT_MS });
                     if (!res.ok) {
                         console.warn(`❌ Broken image: ${fullSrc} (Status: ${res.status})`);
-                        brokenImages.push(`Page: ${url} | Image: ${fullSrc} | Status: ${res.status} | Alt: ${alt}`);
+                        brokenImages.push([url, fullSrc, `Status: ${res.status}`, alt]);
                     }
                 } catch (err) {
                     console.warn(`⚠️ Error loading image ${fullSrc} on ${url}: ${err.message}`);
-                    brokenImages.push(`Page: ${url} | Image: ${fullSrc} | Error: ${err.message} | Alt: ${alt}`);
+                    brokenImages.push([url, fullSrc, `Error: ${err.message}`, alt]);
                 }
             }
         } catch (err) {
@@ -45,10 +46,15 @@ const IMAGE_TIMEOUT_MS = 10000;
         }
     }
 
-    fs.writeFileSync('broken_images_report.txt', brokenImages.join('\n'), 'utf8');
+    // Convert to CSV
+    const csvContent = brokenImages.map(row =>
+        row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(',')
+    ).join('\n');
 
-    console.log(`✅ Done. Found ${brokenImages.length} broken images.`);
-    console.log(`📄 Saved to broken_images_report.txt`);
+    fs.writeFileSync(outputFile, csvContent, 'utf8');
+
+    console.log(`✅ Done. Found ${brokenImages.length - 1} broken images.`);
+    console.log(`📄 CSV saved to: ${path.resolve(outputFile)}`);
 
     await browser.close();
 })();
