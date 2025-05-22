@@ -8,3 +8,6 @@
 
 ## Find broken URLs ##
 `node brokenlink.js`
+
+## Convert broken URLs txt to readable csv ##
+`node convert-to-csv.js`

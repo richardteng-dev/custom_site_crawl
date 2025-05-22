@@ -1,6 +1,0 @@
-https://master-7rqtwti-nkabjr5mrvasq.ca-1.platformsh.site/what-ubc-health
-https://master-7rqtwti-nkabjr5mrvasq.ca-1.platformsh.site/node/1890
-https://master-7rqtwti-nkabjr5mrvasq.ca-1.platformsh.site/node/2019
-https://master-7rqtwti-nkabjr5mrvasq.ca-1.platformsh.site/node/2044
-https://master-7rqtwti-nkabjr5mrvasq.ca-1.platformsh.site/node/2078
-https://master-7rqtwti-nkabjr5mrvasq.ca-1.platformsh.site/node/2033
