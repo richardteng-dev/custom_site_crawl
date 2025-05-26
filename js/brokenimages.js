@@ -8,7 +8,12 @@ const outputFile = '../broken_images_report.csv';
 const IMAGE_TIMEOUT_MS = 10000;
 
 (async () => {
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox'],
+      protocolTimeout: 60000 // 60 seconds
+    });
+
     const page = await browser.newPage();
     const urls = fs.readFileSync(sitemapFile, 'utf8').split('\n').filter(Boolean);
 
